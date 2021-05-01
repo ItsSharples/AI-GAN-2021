@@ -5,7 +5,13 @@ import torch
 from torch import nn, optim
 from torch.autograd.variable import Variable
 from torchvision import transforms, datasets
+from torchvision.datasets import ImageFolder
+from torchvision.datasets.folder import IMG_EXTENSIONS
 
+import numpy as np
+
+import matplotlib.pyplot as plt
+from matplotlib.pyplot import imshow
 
 
 def mnist_data():
@@ -17,7 +23,30 @@ def mnist_data():
     out_dir = './dataset'
     return datasets.MNIST(root=out_dir, train=True, transform=compose, download=True)# Load data
 
+def own_data():
+    compose = transforms.Compose(
+        [transforms.ToTensor(),
+         #transforms.Normalize((.5, .5, .5), (.5, .5, .5))
+         transforms.Grayscale(),
+         transforms.Resize((28,28)),
+         transforms.Normalize((.5,), (.5,))
+        ])
+
+    location = r"./Images"
+    
+    image_datasets = ImageFolder(location, compose)
+    
+    return image_datasets# Load data
+
+
+
 data = mnist_data()# Create loader with data, so that we can iterate over it
+
+data = own_data()
+
+
+
+
 data_loader = torch.utils.data.DataLoader(data, batch_size=100, shuffle=True)
 # Num batches
 num_batches = len(data_loader)
@@ -189,12 +218,27 @@ num_test_samples = 16
 test_noise = noise(num_test_samples)
 
 
-
+# =============================================================================
+# def imshow(inp, title=None):
+#     inp = inp.cpu()
+#     """Imshow for Tensor."""
+#     inp = inp.numpy().reshape(-1, 28, 28)
+#     mean = np.array([0.485, 0.456, 0.406])
+#     std = np.array([0.229, 0.224, 0.225])
+#     inp = std * inp + mean
+#     inp = np.clip(inp, 0, 1)
+#     plt.imshow(inp)
+#     if title is not None:
+#         plt.title(title)
+#     plt.pause(0.001)  # pause a bit so that plots are updated
+# =============================================================================
 
 # Total number of epochs to train
 num_epochs = 200
 for epoch in range(num_epochs):
     print(f"Epoch No: {epoch}")
+    plt.pause(0.0000001)
+    best_test = 9999
     for n_batch, (real_batch,_) in enumerate(data_loader):
         real_batch = real_batch.cuda()
         
@@ -215,10 +259,33 @@ for epoch in range(num_epochs):
         # Log batch error
         #logger.log(d_error, g_error, epoch, n_batch, num_batches)
         
+        # if d_error < best_test:
+        #     best_test = d_error
+        #     test_images = vectors_to_images(d_pred_fake)
+        #     test_images = test_images.data
+        #     images = test_images.cpu().numpy().transpose(0, 2, 3, 1)
+        #     imshow(images[0])
+        #     plt.title(f"Best for Epoch {epoch}")
+                
+            
+        
         # Display Progress every few batches
-        if (n_batch) % 100 == 0: 
+        if (n_batch) % 100 == 0:
+            plt.figure()
             test_images = vectors_to_images(generator(test_noise))
             test_images = test_images.data
+            images = test_images.cpu().numpy().transpose(0, 2, 3, 1)
+            imshow(images[0])
+                   
+            plt.figure()
+            real_images = vectors_to_images(real_data)
+            real_images = real_images.data
+            images = real_images.cpu().numpy().transpose(0, 2, 3, 1)
+            imshow(images[0])
+                
+            #print(f"Disc Error {d_error}")
+            #print(f"Gen Error: {g_error}")
+            
             #logger.log_images(test_images, num_test_samples, epoch, n_batch, num_batches);
             # Display status Logs
             #logger.display_status(epoch, num_epochs, n_batch, num_batches,d_error, g_error, d_pred_real, d_pred_fake)
