@@ -9,10 +9,13 @@ from torchvision.datasets import ImageFolder
 from torchvision.datasets.folder import IMG_EXTENSIONS
 
 import numpy as np
-
+import os 
 import matplotlib.pyplot as plt
 from matplotlib.pyplot import imshow
 
+resize = 200
+size = 128
+colour_channels = 1
 
 def mnist_data():
     compose = transforms.Compose(
@@ -24,13 +27,30 @@ def mnist_data():
     return datasets.MNIST(root=out_dir, train=True, transform=compose, download=True)# Load data
 
 def own_data():
-    compose = transforms.Compose(
-        [transforms.ToTensor(),
-         #transforms.Normalize((.5, .5, .5), (.5, .5, .5))
-         transforms.Grayscale(),
-         transforms.Resize((28,28)),
-         transforms.Normalize((.5,), (.5,))
-        ])
+    if colour_channels == 1:
+        compose = transforms.Compose(
+            [transforms.ToTensor(),
+             transforms.RandomRotation(15),
+             transforms.RandomAffine(15),
+             #transforms.Resize(224),
+             
+             #transforms.ColorJitter(0.1, 0.1, 0.1),
+             #transforms.Normalize((.5, .5, .5), (.5, .5, .5))
+             
+             transforms.Resize((resize,resize)),
+             transforms.CenterCrop(size),
+             
+             transforms.Grayscale(),
+             transforms.Normalize((.5,), (.5,)),
+             
+            ])  
+    if colour_channels == 3:
+        compose = transforms.Compose(
+            [transforms.ToTensor(),
+             #transforms.Normalize((.5, .5, .5), (.5, .5, .5))
+             transforms.Resize((size,size)),
+             transforms.Normalize((.5,), (.5,))
+            ])
 
     location = r"./Images"
     
@@ -52,6 +72,7 @@ data_loader = torch.utils.data.DataLoader(data, batch_size=100, shuffle=True)
 num_batches = len(data_loader)
 
 
+num_pixels = colour_channels * size * size
 
 class DiscriminatorNet(torch.nn.Module):
     """
@@ -59,7 +80,7 @@ class DiscriminatorNet(torch.nn.Module):
     """
     def __init__(self):
         super(DiscriminatorNet, self).__init__()
-        n_features = 784
+        n_features = num_pixels
         n_out = 1
         
         self.hidden0 = nn.Sequential( 
@@ -94,10 +115,10 @@ discriminator = DiscriminatorNet()
     
     
 def images_to_vectors(images):
-    return images.view(images.size(0), 784)
+    return images.view(images.size(0), num_pixels)
 
 def vectors_to_images(vectors):
-    return vectors.view(vectors.size(0), 1, 28, 28)
+    return vectors.view(vectors.size(0), colour_channels, size, size)
 
 
 class GeneratorNet(torch.nn.Module):
@@ -107,7 +128,7 @@ class GeneratorNet(torch.nn.Module):
     def __init__(self):
         super(GeneratorNet, self).__init__()
         n_features = 100
-        n_out = 784
+        n_out = num_pixels
         
         self.hidden0 = nn.Sequential(
             nn.Linear(n_features, 256),
@@ -157,8 +178,6 @@ g_optimizer = optim.Adam(generator.parameters(), lr=0.0002)
 
 
 loss = nn.BCELoss()
-
-
 
 def ones_target(size):
     '''
@@ -233,23 +252,23 @@ test_noise = noise(num_test_samples)
 #     plt.pause(0.001)  # pause a bit so that plots are updated
 # =============================================================================
 
+basePath = "Output"
 # Total number of epochs to train
-num_epochs = 200
+num_epochs = 2000
 for epoch in range(num_epochs):
     print(f"Epoch No: {epoch}")
     plt.pause(0.0000001)
-    best_test = 9999
     for n_batch, (real_batch,_) in enumerate(data_loader):
         real_batch = real_batch.cuda()
         
         N = real_batch.size(0)
         # 1. Train Discriminator
-        real_data = Variable(images_to_vectors(real_batch))
+        real_data = Variable(images_to_vectors(real_batch)).cuda()
         # Generate fake data and detach 
         # (so gradients are not calculated for generator)
-        fake_data = generator(noise(N)).detach() # Train D
+        fake_data = generator(noise(N)).cuda().detach() # Train D
         
-        real_data, fake_data = real_data.cuda(), fake_data.cuda()
+        #real_data, fake_data = real_data.cuda(), fake_data.cuda()
         d_error, d_pred_real, d_pred_fake = train_discriminator(d_optimizer, real_data, fake_data)
 
         # 2. Train Generator
@@ -270,18 +289,31 @@ for epoch in range(num_epochs):
             
         
         # Display Progress every few batches
-        if (n_batch) % 100 == 0:
-            plt.figure()
-            test_images = vectors_to_images(generator(test_noise))
-            test_images = test_images.data
-            images = test_images.cpu().numpy().transpose(0, 2, 3, 1)
-            imshow(images[0])
-                   
-            plt.figure()
-            real_images = vectors_to_images(real_data)
-            real_images = real_images.data
-            images = real_images.cpu().numpy().transpose(0, 2, 3, 1)
-            imshow(images[0])
+        #if (n_batch) % 100 == 0:
+            
+    test_images = vectors_to_images(generator(test_noise))
+    test_images = test_images.data
+    images = test_images.cpu().numpy().transpose(0, 2, 3, 1)
+    for image in range(len(images)):
+        plt.figure(0)
+        plt.clf()
+        plt.axis('off')
+        imshow(images[image])
+        plt.title(f"Generated Epoch {epoch}")
+        output_dir = f"{basePath}/Epoch {epoch}"
+        if not os.path.isdir(output_dir):
+            os.makedirs(output_dir)
+        plt.savefig(f"{output_dir}/Generated_Image_{image}.png", format="png")
+        plt.close()
+            
+            
+            # real_images = vectors_to_images(real_data)
+            # real_images = real_images.data
+            # images = real_images.cpu().numpy().transpose(0, 2, 3, 1)
+            # plt.figure(1)
+            # plt.axis('off')
+            # imshow(images[0])
+            # plt.title(f"Real Data Epoch {epoch}")
                 
             #print(f"Disc Error {d_error}")
             #print(f"Gen Error: {g_error}")
