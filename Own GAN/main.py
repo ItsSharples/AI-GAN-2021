@@ -254,7 +254,7 @@ test_noise = noise(num_test_samples)
 
 basePath = "Output"
 # Total number of epochs to train
-num_epochs = 2000
+num_epochs = 500
 for epoch in range(num_epochs):
     print(f"Epoch No: {epoch}")
     plt.pause(0.0000001)
@@ -294,26 +294,28 @@ for epoch in range(num_epochs):
     test_images = vectors_to_images(generator(test_noise))
     test_images = test_images.data
     images = test_images.cpu().numpy().transpose(0, 2, 3, 1)
+    output_dir = f"{basePath}/Epoch {epoch}"
+    if not os.path.isdir(output_dir):
+        os.makedirs(output_dir)
     for image in range(len(images)):
         plt.figure(0)
         plt.clf()
         plt.axis('off')
         imshow(images[image])
-        plt.title(f"Generated Epoch {epoch}")
-        output_dir = f"{basePath}/Epoch {epoch}"
-        if not os.path.isdir(output_dir):
-            os.makedirs(output_dir)
-        plt.savefig(f"{output_dir}/Generated_Image_{image}.png", format="png")
+        #plt.title(f"Generated Epoch {epoch}")
+        plt.savefig(f"{output_dir}/Generated_Image_{image}.png", format="png", bbox_inches="tight", pad_inches=0)
         plt.close()
             
-            
-            # real_images = vectors_to_images(real_data)
-            # real_images = real_images.data
-            # images = real_images.cpu().numpy().transpose(0, 2, 3, 1)
-            # plt.figure(1)
-            # plt.axis('off')
-            # imshow(images[0])
-            # plt.title(f"Real Data Epoch {epoch}")
+    
+    # real_images = vectors_to_images(real_data)
+    # real_images = real_images.data
+    # images = real_images.cpu().numpy().transpose(0, 2, 3, 1)
+    # for image in range(len(images)):
+    #     plt.figure(1)
+    #     plt.axis('off')
+    #     imshow(images[image])
+    #     plt.savefig(f"{output_dir}/Original_Image_{image}.png", format="png", bbox_inches="tight", pad_inches=0)
+    #     plt.close()
                 
             #print(f"Disc Error {d_error}")
             #print(f"Gen Error: {g_error}")
