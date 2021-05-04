@@ -118,4 +118,12 @@ Raw Images/
 dataset/
 Images/
 Output/
-AI-GAN-2021/
+
+Report/
+
+CycleGAN/docs
+CycleGAN/imgs
+CycleGAN/results
+CycleGAN/checkpoints
+CycleGAN/models
+CycleGAN/Test
