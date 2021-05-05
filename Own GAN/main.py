@@ -13,9 +13,26 @@ import os
 import matplotlib.pyplot as plt
 from matplotlib.pyplot import imshow
 
+import torchvision.utils as vutils
+
+
 resize = 200
 size = 128
-colour_channels = 1
+colour_channels = 3
+
+batch_size = 128
+
+num_epochs = 200
+z_size = 100
+feature_size_dis = 64
+feature_size_gen = 64
+
+learning_rate = 0.0002
+beta_rate = 0.5
+
+
+dataroot = r"./Images"
+basePath = r"./Output"
 
 def mnist_data():
     compose = transforms.Compose(
@@ -46,17 +63,17 @@ def own_data():
             ])  
     if colour_channels == 3:
         compose = transforms.Compose(
-            [transforms.ToTensor(),
-             #transforms.Normalize((.5, .5, .5), (.5, .5, .5))
-             transforms.Resize((size,size)),
-             transforms.Normalize((.5,), (.5,))
+            [
+             transforms.Resize(resize),
+             transforms.RandomRotation(60),
+             transforms.RandomAffine(60),
+             transforms.Resize(int(size*1.5)),
+             transforms.CenterCrop(size),
+             transforms.ToTensor(),
+             transforms.Normalize((.5, .5, .5), (.5, .5, .5))
             ])
 
-    location = r"./Images"
-    
-    image_datasets = ImageFolder(location, compose)
-    
-    return image_datasets# Load data
+    return ImageFolder(dataroot, compose)# Load data
 
 
 
@@ -67,7 +84,7 @@ data = own_data()
 
 
 
-data_loader = torch.utils.data.DataLoader(data, batch_size=100, shuffle=True)
+data_loader = torch.utils.data.DataLoader(data, batch_size=batch_size, shuffle=True)
 # Num batches
 num_batches = len(data_loader)
 
@@ -80,160 +97,196 @@ class DiscriminatorNet(torch.nn.Module):
     """
     def __init__(self):
         super(DiscriminatorNet, self).__init__()
-        n_features = num_pixels
-        n_out = 1
         
-        self.hidden0 = nn.Sequential( 
-            nn.Linear(n_features, 1024),
-            nn.LeakyReLU(0.2),
-            nn.Dropout(0.3)
-        )
-        self.hidden1 = nn.Sequential(
-            nn.Linear(1024, 512),
-            nn.LeakyReLU(0.2),
-            nn.Dropout(0.3)
-        )
-        self.hidden2 = nn.Sequential(
-            nn.Linear(512, 256),
-            nn.LeakyReLU(0.2),
-            nn.Dropout(0.3)
-        )
+        hidden16size = feature_size_dis * 16
+        hidden8size = feature_size_dis * 8
+        hidden4size = feature_size_dis * 4
+        hidden2size = feature_size_dis * 2
+        hidden1size = feature_size_dis * 1
+        
+        self.hidden1 = nn.Sequential( 
+             nn.Conv2d(colour_channels, hidden1size, 4, 2, 1, bias=False),
+             nn.LeakyReLU(0.2, inplace=True)
+             )
+        self.hidden2 = nn.Sequential( 
+             nn.Conv2d(hidden1size, hidden2size, 4, 2, 1, bias=False),
+             nn.BatchNorm2d(hidden2size),
+             nn.LeakyReLU(0.2, inplace=True),
+             )
+        self.hidden4 = nn.Sequential( 
+             nn.Conv2d(hidden2size, hidden4size, 4, 2, 1, bias=False),
+             nn.BatchNorm2d(hidden4size),
+             nn.LeakyReLU(0.2, inplace=True),
+             )
+        self.hidden8 = nn.Sequential( 
+             nn.Conv2d(hidden4size, hidden8size, 4, 2, 1, bias=False),
+             nn.BatchNorm2d(hidden8size),
+             nn.LeakyReLU(0.2, inplace=True),
+             )
+        self.hidden16 = nn.Sequential( 
+             nn.Conv2d(hidden8size, hidden16size, 4, 2, 1, bias=False),
+             nn.BatchNorm2d(hidden16size),
+             nn.LeakyReLU(0.2, inplace=True),
+             )
         self.out = nn.Sequential(
-            torch.nn.Linear(256, n_out),
-            torch.nn.Sigmoid()
-        )
+             nn.Conv2d(hidden16size, 1, 4, 1, 0, bias=False),
+             nn.Sigmoid()
+             )
+
 
     def forward(self, x):
-        x = self.hidden0(x)
         x = self.hidden1(x)
         x = self.hidden2(x)
+        x = self.hidden4(x)
+        x = self.hidden8(x)
+        x = self.hidden16(x)
         x = self.out(x)
         return x
-    
-discriminator = DiscriminatorNet()
-    
-    
-    
-def images_to_vectors(images):
-    return images.view(images.size(0), num_pixels)
-
-def vectors_to_images(vectors):
-    return vectors.view(vectors.size(0), colour_channels, size, size)
-
 
 class GeneratorNet(torch.nn.Module):
     """
     A three hidden-layer generative neural network
     """
     def __init__(self):
-        super(GeneratorNet, self).__init__()
-        n_features = 100
-        n_out = num_pixels
+        super(GeneratorNet, self).__init__()        
         
-        self.hidden0 = nn.Sequential(
-            nn.Linear(n_features, 256),
+        hidden16size = feature_size_gen * 16
+        hidden8size = feature_size_gen * 8
+        hidden4size = feature_size_gen * 4
+        hidden2size = feature_size_gen * 2
+        hidden1size = feature_size_gen * 1
+        
+        
+        self.hidden16 = nn.Sequential( 
+            nn.ConvTranspose2d(z_size, hidden16size, 4, 1, 0, bias = False),
+            nn.BatchNorm2d(hidden16size),
             nn.LeakyReLU(0.2)
         )
-        self.hidden1 = nn.Sequential(            
-            nn.Linear(256, 512),
+        self.hidden8 = nn.Sequential( 
+            nn.ConvTranspose2d(hidden16size, hidden8size, 4, 2, 1, bias = False),
+            nn.BatchNorm2d(hidden8size),
+            nn.LeakyReLU(0.2)
+        )
+        self.hidden4 = nn.Sequential(
+            nn.ConvTranspose2d(hidden8size, hidden4size, 4, 2, 1, bias = False),
+            nn.BatchNorm2d(hidden4size),
             nn.LeakyReLU(0.2)
         )
         self.hidden2 = nn.Sequential(
-            nn.Linear(512, 1024),
+            nn.ConvTranspose2d(hidden4size, hidden2size, 4, 2, 1, bias = False),
+            nn.BatchNorm2d(hidden2size),
             nn.LeakyReLU(0.2)
         )
-        
+        self.hidden1 = nn.Sequential(
+            nn.ConvTranspose2d(hidden2size, hidden1size, 4, 2, 1, bias = False),
+            nn.BatchNorm2d(hidden1size),
+            nn.LeakyReLU(0.2)
+        )
         self.out = nn.Sequential(
-            nn.Linear(1024, n_out),
+            nn.ConvTranspose2d(hidden1size, colour_channels, 4, 2, 1, bias = False),
             nn.Tanh()
         )
 
     def forward(self, x):
-        x = self.hidden0(x)
-        x = self.hidden1(x)
+        x = self.hidden16(x)
+        x = self.hidden8(x)
+        x = self.hidden4(x)
         x = self.hidden2(x)
+        x = self.hidden1(x)
         x = self.out(x)
         return x
-    
+ 
+def images_to_vectors(images):
+    return images.view(images.size(0), num_pixels)
 
-generator = GeneratorNet()
-
-
+def vectors_to_images(vectors):
+    return vectors.view(vectors.size(0), colour_channels, size, size)
 
 def noise(size):
     '''
     Generates a 1-d vector of gaussian sampled random values
     '''
-    n = Variable(torch.randn(size, 100))
-    n = n.cuda()
-    return n
+    return torch.randn(size, z_size, 1, 1, device=device)
+
+# custom weights initialization called on netG and netD
+def weights_init(m):
+    classname = m.__class__.__name__
+    if classname.find('Conv') != -1:
+        nn.init.normal_(m.weight.data, 0.0, 0.02)
+    elif classname.find('BatchNorm') != -1:
+        nn.init.normal_(m.weight.data, 1.0, 0.02)
+        nn.init.constant_(m.bias.data, 0)
+        
+real_ = 1.
+fake_ = 0.
+
+def train_discriminator(optimizer, real_data, fake, label):
+    ## Train with all-real batch
+    discriminator.zero_grad()
+    # Format batch
+    #real_data = real_batch.to(device)
+    label.fill_(real_)
+    # Forward pass real batch through D
+    output = discriminator(real_data).view(-1)
+    # Calculate loss on all-real batch
+    errD_real = loss(output, label)
+    # Calculate gradients for D in backward pass
+    errD_real.backward()
+    D_x = output.mean().item()
+    
+    ## Train with all-fake batch
+    
+    # Generate a new Image
+    label.fill_(fake_)
+    # Does it think it's Fake?
+    output = discriminator(fake.detach()).view(-1)
+    # Calculate D's loss on the all-fake batch
+    errD_fake = loss(output, label)
+    # Calculate the gradients for this batch, accumulated (summed) with previous gradients
+    errD_fake.backward()
+    D_G_z1 = output.mean().item()
+    # Compute error of D as sum over the fake and the real batches
+    errD = errD_real + errD_fake
+    # Update D
+    d_optimizer.step()
+    
+    
+    return errD, D_x, D_G_z1
 
 
-generator.cuda()
-discriminator.cuda()
+def train_generator(optimizer, fake_data, label):
+    generator.zero_grad()
+    label.fill_(real_)  # fake labels are real for generator cost
+    # Since we just updated D, perform another forward pass of all-fake batch through D
+    output = discriminator(fake_data).view(-1)
+    # Calculate G's loss based on this output
+    errG = loss(output, label)
+    # Calculate gradients for G
+    errG.backward()
+    D_G_z2 = output.mean().item()
+    # Update G
+    optimizer.step()
+    return errG
 
-d_optimizer = optim.Adam(discriminator.parameters(), lr=0.0002)
-g_optimizer = optim.Adam(generator.parameters(), lr=0.0002)
+      
+device = "cuda:0"  
 
+
+discriminator = DiscriminatorNet().to(device)
+generator = GeneratorNet().to(device)
+      
+generator.apply(weights_init)
+discriminator.apply(weights_init)
+
+
+d_optimizer = optim.Adam(discriminator.parameters(), lr=learning_rate, betas=(beta_rate, 0.999))
+g_optimizer = optim.Adam(    generator.parameters(), lr=learning_rate, betas=(beta_rate, 0.999))
 
 
 loss = nn.BCELoss()
 
-def ones_target(size):
-    '''
-    Tensor containing ones, with shape = size
-    '''
-    data = Variable(torch.ones(size, 1))
-    data = data.cuda()
-    return data
 
-def zeros_target(size):
-    '''
-    Tensor containing zeros, with shape = size
-    '''
-    data = Variable(torch.zeros(size, 1))
-    data = data.cuda()
-    return data
-
-
-
-def train_discriminator(optimizer, real_data, fake_data):
-    real_data, fake_data = real_data.cuda(), fake_data.cuda();
-    N = real_data.size(0)
-    # Reset gradients
-    optimizer.zero_grad()
-    
-    # 1.1 Train on Real Data
-    prediction_real = discriminator(real_data)
-    # Calculate error and backpropagate
-    error_real = loss(prediction_real, ones_target(N) )
-    error_real.backward()
-
-    # 1.2 Train on Fake Data
-    prediction_fake = discriminator(fake_data)
-    # Calculate error and backpropagate
-    error_fake = loss(prediction_fake, zeros_target(N))
-    error_fake.backward()
-    
-    # 1.3 Update weights with gradients
-    optimizer.step()
-    
-    # Return error and predictions for real and fake inputs
-    return error_real + error_fake, prediction_real, prediction_fake
-
-
-def train_generator(optimizer, fake_data):
-    N = fake_data.size(0)    # Reset gradients
-    optimizer.zero_grad()    # Sample noise and generate fake data
-    prediction = discriminator(fake_data)    # Calculate error and backpropagate
-    error = loss(prediction, ones_target(N))
-    error.backward()    # Update weights with gradients
-    optimizer.step()    # Return error
-    return error
-
-
-
-num_test_samples = 16
+num_test_samples = 64
 test_noise = noise(num_test_samples)
 
 
@@ -252,32 +305,35 @@ test_noise = noise(num_test_samples)
 #     plt.pause(0.001)  # pause a bit so that plots are updated
 # =============================================================================
 
-basePath = "Output"
-# Total number of epochs to train
-num_epochs = 500
+# Track Progress
+img_list = []
+G_losses = []
+D_losses = []
+iters = 0
+
+
+# Plot some training images
+real_batch = next(iter(data_loader))
+plt.figure(figsize=(8,8))
+plt.axis("off")
+plt.title("Training Images")
+plt.imshow(np.transpose(vutils.make_grid(real_batch[0].to(device)[:64], padding=2, normalize=True).cpu(),(1,2,0)))
+
+
 for epoch in range(num_epochs):
     print(f"Epoch No: {epoch}")
-    plt.pause(0.0000001)
     for n_batch, (real_batch,_) in enumerate(data_loader):
-        real_batch = real_batch.cuda()
+        real_data = real_batch.to(device)
         
-        N = real_batch.size(0)
-        # 1. Train Discriminator
-        real_data = Variable(images_to_vectors(real_batch)).cuda()
-        # Generate fake data and detach 
-        # (so gradients are not calculated for generator)
-        fake_data = generator(noise(N)).cuda().detach() # Train D
+        size_ = real_data.size(0)
+        fake_data = generator(noise(size_))
+        label = torch.full((size_,), real_, dtype=torch.float, device=device)
         
-        #real_data, fake_data = real_data.cuda(), fake_data.cuda()
-        d_error, d_pred_real, d_pred_fake = train_discriminator(d_optimizer, real_data, fake_data)
+        # Train Discriminator
+        d_error, d_pred_real, d_pred_fake = train_discriminator(d_optimizer, real_data, fake_data, label)
+        # Train Generator
+        g_error = train_generator(g_optimizer, fake_data, label)
 
-        # 2. Train Generator
-        # Generate fake data
-        fake_data = generator(noise(N))        # Train G
-        g_error = train_generator(g_optimizer, fake_data)
-        # Log batch error
-        #logger.log(d_error, g_error, epoch, n_batch, num_batches)
-        
         # if d_error < best_test:
         #     best_test = d_error
         #     test_images = vectors_to_images(d_pred_fake)
@@ -285,15 +341,14 @@ for epoch in range(num_epochs):
         #     images = test_images.cpu().numpy().transpose(0, 2, 3, 1)
         #     imshow(images[0])
         #     plt.title(f"Best for Epoch {epoch}")
-                
-            
         
-        # Display Progress every few batches
-        #if (n_batch) % 100 == 0:
-            
-    test_images = vectors_to_images(generator(test_noise))
-    test_images = test_images.data
-    images = test_images.cpu().numpy().transpose(0, 2, 3, 1)
+        # Save Losses for plotting later
+        G_losses.append(g_error.item())
+        D_losses.append(d_error.item())
+
+    with torch.no_grad():
+        test_images = generator(test_noise).detach().cpu()
+    images = test_images.numpy().transpose(0, 2, 3, 1)
     output_dir = f"{basePath}/Epoch {epoch}"
     if not os.path.isdir(output_dir):
         os.makedirs(output_dir)
