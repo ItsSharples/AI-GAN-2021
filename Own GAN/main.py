@@ -17,12 +17,12 @@ import torchvision.utils as vutils
 
 
 resize = 200
-size = 128
+size = 64
 colour_channels = 3
 
 batch_size = 128
 
-num_epochs = 200
+num_epochs = 500
 z_size = 100
 feature_size_dis = 64
 feature_size_gen = 64
@@ -105,31 +105,38 @@ class DiscriminatorNet(torch.nn.Module):
         hidden1size = feature_size_dis * 1
         
         self.hidden1 = nn.Sequential( 
-             nn.Conv2d(colour_channels, hidden1size, 4, 2, 1, bias=False),
+             nn.Conv2d(colour_channels, hidden1size, 4, stride=2, padding=1, bias=False), 
              nn.LeakyReLU(0.2, inplace=True)
              )
         self.hidden2 = nn.Sequential( 
-             nn.Conv2d(hidden1size, hidden2size, 4, 2, 1, bias=False),
+             nn.Conv2d(hidden1size, hidden2size, 4, stride=2, padding=1, bias=False), 
              nn.BatchNorm2d(hidden2size),
              nn.LeakyReLU(0.2, inplace=True),
              )
         self.hidden4 = nn.Sequential( 
-             nn.Conv2d(hidden2size, hidden4size, 4, 2, 1, bias=False),
+             nn.Conv2d(hidden2size, hidden4size, 4, stride=2, padding=1, bias=False), 
              nn.BatchNorm2d(hidden4size),
              nn.LeakyReLU(0.2, inplace=True),
              )
         self.hidden8 = nn.Sequential( 
-             nn.Conv2d(hidden4size, hidden8size, 4, 2, 1, bias=False),
+             nn.Conv2d(hidden4size, hidden8size, 4, stride=2, padding=1, bias=False), 
              nn.BatchNorm2d(hidden8size),
              nn.LeakyReLU(0.2, inplace=True),
              )
+        
+        self.out8 = nn.Sequential(
+             nn.Conv2d(hidden8size, 1, 4, stride=1, padding=0, bias=False), 
+             nn.Sigmoid()
+             )
+        
+        
         self.hidden16 = nn.Sequential( 
-             nn.Conv2d(hidden8size, hidden16size, 4, 2, 1, bias=False),
+             nn.Conv2d(hidden8size, hidden16size, 4, stride=2, padding=1, bias=False), 
              nn.BatchNorm2d(hidden16size),
              nn.LeakyReLU(0.2, inplace=True),
              )
-        self.out = nn.Sequential(
-             nn.Conv2d(hidden16size, 1, 4, 1, 0, bias=False),
+        self.out16 = nn.Sequential(
+             nn.Conv2d(hidden16size, 1, 4, stride=1, padding=0, bias=False), 
              nn.Sigmoid()
              )
 
@@ -139,8 +146,8 @@ class DiscriminatorNet(torch.nn.Module):
         x = self.hidden2(x)
         x = self.hidden4(x)
         x = self.hidden8(x)
-        x = self.hidden16(x)
-        x = self.out(x)
+        #x = self.hidden16(x)
+        x = self.out8(x)
         return x
 
 class GeneratorNet(torch.nn.Module):
@@ -157,13 +164,19 @@ class GeneratorNet(torch.nn.Module):
         hidden1size = feature_size_gen * 1
         
         
-        self.hidden16 = nn.Sequential( 
+
+        self.entry16 = nn.Sequential( 
             nn.ConvTranspose2d(z_size, hidden16size, 4, 1, 0, bias = False),
             nn.BatchNorm2d(hidden16size),
             nn.LeakyReLU(0.2)
         )
         self.hidden8 = nn.Sequential( 
             nn.ConvTranspose2d(hidden16size, hidden8size, 4, 2, 1, bias = False),
+            nn.BatchNorm2d(hidden8size),
+            nn.LeakyReLU(0.2)
+        )
+        self.entry8 = nn.Sequential( 
+            nn.ConvTranspose2d(z_size, hidden8size, 4, 1, 0, bias = False),
             nn.BatchNorm2d(hidden8size),
             nn.LeakyReLU(0.2)
         )
@@ -188,8 +201,8 @@ class GeneratorNet(torch.nn.Module):
         )
 
     def forward(self, x):
-        x = self.hidden16(x)
-        x = self.hidden8(x)
+        #x = self.hidden16(x)
+        x = self.entry8(x)
         x = self.hidden4(x)
         x = self.hidden2(x)
         x = self.hidden1(x)
@@ -313,12 +326,19 @@ iters = 0
 
 
 # Plot some training images
-real_batch = next(iter(data_loader))
-plt.figure(figsize=(8,8))
-plt.axis("off")
-plt.title("Training Images")
-plt.imshow(np.transpose(vutils.make_grid(real_batch[0].to(device)[:64], padding=2, normalize=True).cpu(),(1,2,0)))
-
+images = (next(iter(data_loader))[0].to(device)[:64]).cpu().numpy().transpose(0, 2, 3, 1)
+output_dir = f"{basePath}/Original Images"
+if not os.path.isdir(output_dir):
+    os.makedirs(output_dir)
+for image in range(len(images)):
+    plt.figure(0)
+    plt.clf()
+    plt.axis('off')
+    imshow(images[image])
+    #plt.title(f"Generated Epoch {epoch}")
+    plt.savefig(f"{output_dir}/Generated_Image_{image}.png", format="png", bbox_inches="tight", pad_inches=0)
+    plt.close()
+    
 
 for epoch in range(num_epochs):
     print(f"Epoch No: {epoch}")
@@ -330,9 +350,54 @@ for epoch in range(num_epochs):
         label = torch.full((size_,), real_, dtype=torch.float, device=device)
         
         # Train Discriminator
-        d_error, d_pred_real, d_pred_fake = train_discriminator(d_optimizer, real_data, fake_data, label)
+        #d_error, d_pred_real, d_pred_fake = train_discriminator(d_optimizer, real_data, fake_data, label)
         # Train Generator
-        g_error = train_generator(g_optimizer, fake_data, label)
+        #g_error = train_generator(g_optimizer, fake_data, label)
+        ## Train with all-real batch
+        discriminator.zero_grad()
+        # Format batch
+        #real_data = real_batch.to(device)
+        label.fill_(real_)
+        # Forward pass real batch through D
+        output = discriminator(real_data).view(-1)
+        # Calculate loss on all-real batch
+        errD_real = loss(output, label)
+        # Calculate gradients for D in backward pass
+        errD_real.backward()
+        D_x = output.mean().item()
+        
+        ## Train with all-fake batch
+        
+        # Generate a new Image
+        label.fill_(fake_)
+        # Does it think it's Fake?
+        output = discriminator(fake_data.detach()).view(-1)
+        # Calculate D's loss on the all-fake batch
+        errD_fake = loss(output, label)
+        # Calculate the gradients for this batch, accumulated (summed) with previous gradients
+        errD_fake.backward()
+        D_G_z1 = output.mean().item()
+        # Compute error of D as sum over the fake and the real batches
+        errD = errD_real + errD_fake
+        # Update D
+        d_optimizer.step()
+        
+        
+        
+        generator.zero_grad()
+        label.fill_(real_)  # fake labels are real for generator cost
+        # Since we just updated D, perform another forward pass of all-fake batch through D
+        output = discriminator(fake_data).view(-1)
+        # Calculate G's loss based on this output
+        errG = loss(output, label)
+        # Calculate gradients for G
+        errG.backward()
+        D_G_z2 = output.mean().item()
+        # Update G
+        g_optimizer.step()
+        
+        d_error = errD
+        g_error = errG
 
         # if d_error < best_test:
         #     best_test = d_error
@@ -348,33 +413,17 @@ for epoch in range(num_epochs):
 
     with torch.no_grad():
         test_images = generator(test_noise).detach().cpu()
-    images = test_images.numpy().transpose(0, 2, 3, 1)
-    output_dir = f"{basePath}/Epoch {epoch}"
-    if not os.path.isdir(output_dir):
-        os.makedirs(output_dir)
-    for image in range(len(images)):
-        plt.figure(0)
-        plt.clf()
-        plt.axis('off')
-        imshow(images[image])
-        #plt.title(f"Generated Epoch {epoch}")
-        plt.savefig(f"{output_dir}/Generated_Image_{image}.png", format="png", bbox_inches="tight", pad_inches=0)
-        plt.close()
+        images = test_images.numpy().transpose(0, 2, 3, 1)
+        output_dir = f"{basePath}/Epoch {epoch}"
+        if not os.path.isdir(output_dir):
+            os.makedirs(output_dir)
             
-    
-    # real_images = vectors_to_images(real_data)
-    # real_images = real_images.data
-    # images = real_images.cpu().numpy().transpose(0, 2, 3, 1)
-    # for image in range(len(images)):
-    #     plt.figure(1)
-    #     plt.axis('off')
-    #     imshow(images[image])
-    #     plt.savefig(f"{output_dir}/Original_Image_{image}.png", format="png", bbox_inches="tight", pad_inches=0)
-    #     plt.close()
-                
-            #print(f"Disc Error {d_error}")
-            #print(f"Gen Error: {g_error}")
-            
-            #logger.log_images(test_images, num_test_samples, epoch, n_batch, num_batches);
-            # Display status Logs
-            #logger.display_status(epoch, num_epochs, n_batch, num_batches,d_error, g_error, d_pred_real, d_pred_fake)
+        torch.save(generator, '/'.join([output_dir, "model.pth"]))
+        for image in range(len(images)):
+            plt.figure(0)
+            plt.clf()
+            plt.axis('off')
+            imshow(images[image])
+            #plt.title(f"Generated Epoch {epoch}")
+            plt.savefig(f"{output_dir}/Generated_Image_{image}.png", format="png", bbox_inches="tight", pad_inches=0)
+            plt.close()
