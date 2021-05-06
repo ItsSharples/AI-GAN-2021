@@ -127,3 +127,5 @@ CycleGAN/results
 CycleGAN/checkpoints
 CycleGAN/models
 CycleGAN/Test
+Tmp Images/
+BigGAN/
