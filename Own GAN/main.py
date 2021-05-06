@@ -352,7 +352,7 @@ def drawOriginals():
 
 def trainModels():
     final_images = {}
-    for raw_epoch in range(num_epochs):
+    for raw_epoch in range(num_epochs + 1):
         epoch = raw_epoch + current_epoch
         print(f"Epoch No: {epoch}")
         
@@ -519,7 +519,7 @@ def generateImage(epoch = 95, allOfThem = False, toFile = False):
 #num_epochs = 15
 #generator, discriminator = loadModels(90)
 #generateImage(100, True, True)
-trainModels()
+#trainModels()
 
 
 #for epoch in [25,50,75,100,125,150,175,200,225,250,275,300,325,350,375,400]:
