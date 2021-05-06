@@ -113,7 +113,7 @@ dmypy.json
 # Pyre type checker
 .pyre/
 
-
+Tmp Images/
 Raw Images/
 dataset/
 Images/
@@ -125,5 +125,5 @@ CycleGAN/docs
 CycleGAN/imgs
 # CycleGAN/results - The Trained Models
 CycleGAN/checkpoints
-Tmp Images/
+
 BigGAN/
