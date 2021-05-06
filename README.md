@@ -1,5 +1,7 @@
 # AI-GAN-2021
 
+## This Project uses PyTorch
+### Link to Repo: https://github.com/ItsSharples/AI-GAN-2021
 ## Requirements are detailed in requirements.txt
 You may not need all of them, but it's the environment I used.
 
