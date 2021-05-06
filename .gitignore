@@ -115,15 +115,14 @@ dmypy.json
 
 Tmp Images/
 Raw Images/
-dataset/
-Images/
 Output/
 
 Report/
 
 CycleGAN/docs
 CycleGAN/imgs
+CycleGAN/results
 # CycleGAN/results - The Trained Models
 CycleGAN/checkpoints
-
+*Copy*.png
 BigGAN/
